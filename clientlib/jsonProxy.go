@@ -34,10 +34,10 @@ func StartProxy(localAddr string, localPort int, remoteAddr string, remotePort i
 		return e
 	}
 
-	return startProxyWithData(data)
+	return StartProxyWithData(data)
 }
 func GOStartProxyWithData(jsonData []byte) {
-	go startProxyWithData(jsonData)
+	go StartProxyWithData(jsonData)
 }
 func StopProxy() {
 	if currentProxy != nil {
@@ -49,7 +49,7 @@ func StopProxy() {
 
 var currentProxy *proxy.Proxy
 
-func startProxyWithData(jsonData []byte) error {
+func StartProxyWithData(jsonData []byte) error {
 	var data = jsonData
 	proxy, err := proxy.NewProxyFromConfigData(data, true)
 	if err != nil {
