@@ -122,6 +122,7 @@ func TestNewShareInfoFromURL_BadQuery(t *testing.T) {
 		_, e := NewShareInfoFromURL(testCase)
 		assert.Error(t, e, "parse bad query should error")
 	}
+
 }
 
 func TestNewShareInfoFromURL_SNI_Empty(t *testing.T) {

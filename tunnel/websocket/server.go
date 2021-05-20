@@ -66,6 +66,7 @@ func (s *Server) AcceptConn(tunnel.Tunnel) (tunnel.Conn, error) {
 	defer rewindConn.StopBuffering()
 	rw := bufio.NewReadWriter(bufio.NewReader(rewindConn), bufio.NewWriter(rewindConn))
 	req, err := http.ReadRequest(rw.Reader)
+
 	if err != nil {
 		log.Debug("invalid http request")
 		rewindConn.Rewind()

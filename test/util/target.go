@@ -16,10 +16,8 @@ import (
 	"github.com/p4gefau1t/trojan-go/log"
 )
 
-var (
-	HTTPAddr string
-	HTTPPort string
-)
+var HTTPAddr string
+var HTTPPort string
 
 func runHelloHTTPServer() {
 	httpHello := func(w http.ResponseWriter, req *http.Request) {
@@ -53,10 +51,8 @@ func runHelloHTTPServer() {
 	wg.Done()
 }
 
-var (
-	EchoAddr string
-	EchoPort int
-)
+var EchoAddr string
+var EchoPort int
 
 func runTCPEchoServer() {
 	listener, err := net.Listen("tcp", EchoAddr)
@@ -112,10 +108,8 @@ func GeneratePayload(length int) []byte {
 	return buf
 }
 
-var (
-	BlackHoleAddr string
-	BlackHolePort int
-)
+var BlackHoleAddr string
+var BlackHolePort int
 
 func runTCPBlackHoleServer() {
 	listener, err := net.Listen("tcp", BlackHoleAddr)
