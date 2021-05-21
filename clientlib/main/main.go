@@ -19,7 +19,10 @@ func main() {
 	runtime.ReadMemStats(&first)
 	log.SetLogLevel(0)
 	debug.SetGCPercent(1)
-
+	go func() {
+		time.Sleep(5 * time.Second)
+		TrojanGO.StopProxy()
+	}()
 	for {
 		time.Sleep(1 * time.Second)
 		var current runtime.MemStats

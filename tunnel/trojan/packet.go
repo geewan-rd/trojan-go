@@ -3,6 +3,7 @@ package trojan
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -56,7 +57,8 @@ func (c *PacketConn) ReadWithMetadata(payload []byte) (int, *tunnel.Metadata, er
 		NetworkType: "udp",
 	}
 	if err := addr.ReadFrom(c.Conn); err != nil {
-		return 0, nil, common.NewError("failed to parse udp packet addr").Base(err)
+		logString := fmt.Sprintf("addr:%s,failed to parse udp packet addr", addr.String())
+		return 0, nil, common.NewError(logString).Base(err)
 	}
 	lengthBuf := [2]byte{}
 	_, err := io.ReadFull(c.Conn, lengthBuf[:])

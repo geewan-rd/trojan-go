@@ -3,8 +3,10 @@ package TrojanGO
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/log"
 	_ "github.com/p4gefau1t/trojan-go/log/golog"
@@ -45,6 +47,15 @@ func StopProxy() {
 		runtime.GC()
 		debug.FreeOSMemory()
 	}
+}
+func TestStopProxy() {
+	StopProxy()
+	go func() {
+		time.Sleep(5 * time.Second)
+		log.Debug("停止后，3秒强制退出进程")
+		runtime.Goexit()
+		os.Exit(0)
+	}()
 }
 
 var currentProxy *proxy.Proxy
