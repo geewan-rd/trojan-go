@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"runtime"
+	"runtime/debug"
 	"strings"
 
 	"github.com/p4gefau1t/trojan-go/common"
@@ -67,10 +69,13 @@ func (p *Proxy) relayConnLoop() {
 						return
 					}
 					defer outbound.Close()
+
 					errChan := make(chan error, 2)
 					copyConn := func(a, b net.Conn) {
 						_, err := io.Copy(a, b)
 						errChan <- err
+						runtime.GC()
+						debug.FreeOSMemory()
 						return
 					}
 					go copyConn(inbound, outbound)
@@ -118,6 +123,8 @@ func (p *Proxy) relayPacketLoop() {
 					copyPacket := func(a, b tunnel.PacketConn) {
 						for {
 							buf := make([]byte, MaxPacketSize)
+							runtime.GC()
+							debug.FreeOSMemory()
 							n, metadata, err := a.ReadWithMetadata(buf)
 							if err != nil {
 								errChan <- err

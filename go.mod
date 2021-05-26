@@ -4,6 +4,8 @@ go 1.16
 
 require (
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/google/pprof v0.0.0-20210506205249-923b5ab0fc1a // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20210406231658-61c622dd7d50 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/refraction-networking/utls v0.0.0-20201210053706-2179f286686b
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5
@@ -17,6 +19,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210503195802-e9a32991a82e
 	golang.org/x/mobile v0.0.0-20210220033013-bdb1ca9a1e08 // indirect
 	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420
+	golang.org/x/sys v0.0.0-20210521203332-0cec03c779c1 // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/grpc v1.37.0
 	google.golang.org/protobuf v1.26.0
