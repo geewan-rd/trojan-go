@@ -44,6 +44,7 @@ func (c *PacketConn) Close() error {
 	return nil
 }
 
+//1
 func (c *PacketConn) WriteWithMetadata(p []byte, m *tunnel.Metadata) (int, error) {
 	select {
 	case c.output <- &packetInfo{

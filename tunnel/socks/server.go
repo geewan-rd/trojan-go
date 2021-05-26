@@ -195,6 +195,7 @@ func (s *Server) packetDispatchLoop() {
 	}
 }
 
+///socks5 连接 接收loop
 func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
