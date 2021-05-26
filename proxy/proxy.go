@@ -61,6 +61,8 @@ func (p *Proxy) relayConnLoop() {
 					log.Error(common.NewError("failed to accept connection").Base(err))
 					continue
 				}
+				runtime.GC()
+				debug.FreeOSMemory()
 				go func(inbound tunnel.Conn) {
 					defer inbound.Close()
 					outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)

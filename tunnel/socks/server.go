@@ -7,6 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"runtime"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -115,6 +117,8 @@ func (s *Server) associate(conn net.Conn, addr *tunnel.Address) error {
 func (s *Server) packetDispatchLoop() {
 	for {
 		buf := make([]byte, MaxPacketSize)
+		runtime.GC()
+		debug.FreeOSMemory()
 		n, src, err := s.listenPacketConn.ReadFrom(buf)
 		if err != nil {
 			select {
@@ -145,6 +149,8 @@ func (s *Server) packetDispatchLoop() {
 					select {
 					case info := <-conn.output:
 						buf := bytes.NewBuffer(make([]byte, 0, MaxPacketSize))
+						runtime.GC()
+						debug.FreeOSMemory()
 						buf.Write([]byte{0, 0, 0}) //RSV, FRAG
 						common.Must(info.metadata.Address.WriteTo(buf))
 						buf.Write(info.payload)
@@ -189,6 +195,8 @@ func (s *Server) packetDispatchLoop() {
 			},
 			payload: payload[:length],
 		}:
+			runtime.GC()
+			debug.FreeOSMemory()
 		default:
 			log.Warn("socks udp queue full")
 		}
@@ -205,6 +213,8 @@ func (s *Server) acceptLoop() {
 		}
 		go func(conn net.Conn) {
 			newConn, err := s.handshake(conn)
+			runtime.GC()
+			debug.FreeOSMemory()
 			if err != nil {
 				log.Error(common.NewError("socks failed to handshake with client").Base(err))
 				return

@@ -6,6 +6,8 @@ import (
 	"context"
 	"io"
 	"net"
+	"runtime"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -70,6 +72,8 @@ func (s *Server) packetDispatchLoop() {
 	go func() {
 		for {
 			buf := make([]byte, MaxPacketSize)
+			runtime.GC()
+			debug.FreeOSMemory()
 			n, src, dst, err := ReadFromUDP(s.udpListener, buf)
 			if err != nil {
 				select {
@@ -90,6 +94,8 @@ func (s *Server) packetDispatchLoop() {
 	}()
 
 	for {
+		runtime.GC()
+		debug.FreeOSMemory()
 		var info *tproxyPacketInfo
 		select {
 		case info = <-packetQueue:
@@ -124,6 +130,8 @@ func (s *Server) packetDispatchLoop() {
 				defer conn.Close()
 				log.Debug("udp packet daemon for", conn.src.String())
 				for {
+					runtime.GC()
+					debug.FreeOSMemory()
 					select {
 					case info := <-conn.output:
 						if info.metadata.AddressType != tunnel.IPv4 &&
