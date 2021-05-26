@@ -12,7 +12,10 @@ import (
 
 func main() {
 
-	go TrojanGO.StartProxy("127.0.0.1", 7777, "47.242.176.86", 443, "fobwifi")
+	// go TrojanGO.StartProxy("127.0.0.1", 7777, "47.242.176.86", 443, "fobwifi")
+
+	b := `{"run_type": "client","local_addr": "127.0.0.1","local_port": 7777,"remote_addr": "47.242.176.86","remote_port": 443,"log_level": 0,"log_file": "","password": ["fobwifi"],"udp_timeout":60,"ssl": {"verify": false,"sni": ""}}`
+	go TrojanGO.StartProxyWithString(b)
 
 	http.ListenAndServe("0.0.0.0:6060", nil)
 

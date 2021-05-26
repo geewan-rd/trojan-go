@@ -49,6 +49,10 @@ func (p *Proxy) Close() error {
 func (p *Proxy) relayConnLoop() {
 	for _, source := range p.sources {
 		go func(source tunnel.Server) {
+			var connectCount = 0
+			var currentIndex = 0
+			maxCount := 20
+			conArr := make([]tunnel.Conn, maxCount)
 			for {
 				inbound, err := source.AcceptConn(nil)
 				if err != nil {
@@ -61,10 +65,23 @@ func (p *Proxy) relayConnLoop() {
 					log.Error(common.NewError("failed to accept connection").Base(err))
 					continue
 				}
-				runtime.GC()
-				debug.FreeOSMemory()
+
 				go func(inbound tunnel.Conn) {
-					defer inbound.Close()
+					index := currentIndex % maxCount
+					if con := conArr[index]; con != nil {
+						con.Close()
+						conArr[index] = inbound
+						runtime.GC()
+						debug.FreeOSMemory()
+					}
+					currentIndex += 1
+					connectCount += 1
+					log.Debugf("count:%d,连接：%s", connectCount, inbound.Metadata())
+					defer func() {
+						inbound.Close()
+						conArr[index] = nil
+						currentIndex = index
+					}()
 					outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
 					if err != nil {
 						log.Error(common.NewError("proxy failed to dial connection").Base(err))

@@ -78,3 +78,12 @@ func StartProxyWithData(jsonData []byte) error {
 
 	return nil
 }
+func StartProxyWithString(jsonData string) {
+	var dat map[string]interface{}
+	b := []byte(jsonData)
+	if err := json.Unmarshal(b, &dat); err != nil {
+		log.Fatalf("json错误：%s,json:%s", err.Error(), jsonData)
+	}
+
+	go StartProxyWithData(b)
+}
