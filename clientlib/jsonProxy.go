@@ -62,15 +62,22 @@ var currentProxy *proxy.Proxy
 
 func StartProxyWithData(jsonData []byte) error {
 	var data = jsonData
-	proxy, err := proxy.NewProxyFromConfigData(data, true)
+	pr, err := proxy.NewProxyFromConfigData(data, true)
 	if err != nil {
 		fmt.Print("error:%@", err.Error())
 		log.Fatal(err)
 		return err
 	}
+	dat, err := getJson(jsonData)
+	if err == nil {
+		value := dat["maxConnCount"]
+		if value != nil {
+			proxy.MaxCount = int(value.(float64))
+		}
+	}
 	go log.Info("StartProxyWithData")
-	currentProxy = proxy
-	err = proxy.Run()
+	currentProxy = pr
+	err = pr.Run()
 	if err != nil {
 		log.Fatal(err)
 		return err
@@ -79,11 +86,18 @@ func StartProxyWithData(jsonData []byte) error {
 	return nil
 }
 func StartProxyWithString(jsonData string) {
-	var dat map[string]interface{}
 	b := []byte(jsonData)
-	if err := json.Unmarshal(b, &dat); err != nil {
+	_, err := getJson(b)
+	if err != nil {
 		log.Fatalf("json错误：%s,json:%s", err.Error(), jsonData)
 	}
 
 	go StartProxyWithData(b)
+}
+func getJson(b []byte) (map[string]interface{}, error) {
+	var dat map[string]interface{}
+	if err := json.Unmarshal(b, &dat); err != nil {
+		return nil, err
+	}
+	return dat, nil
 }

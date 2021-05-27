@@ -52,16 +52,22 @@ func (p *Proxy) relayConnLoop() {
 		go acceptTunnelConn(source, p)
 	}
 }
+
+var MaxCount = 0
+
 func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	var connectCount = 0
 	var currentIndex = 0
-	maxCount := 13
-	conArr := make([]tunnel.Conn, maxCount)
-	pool := tunny.NewFunc(maxCount+2, func(p interface{}) interface{} {
-		f := p.(func())
-		f()
-		return true
-	})
+	conArr := make([]tunnel.Conn, MaxCount)
+	var pool *tunny.Pool
+	if MaxCount > 0 {
+		pool = tunny.NewFunc(MaxCount+2, func(p interface{}) interface{} {
+			f := p.(func())
+			f()
+			return true
+		})
+	}
+
 	for {
 		inbound, err := source.AcceptConn(nil)
 		if err != nil {
@@ -75,11 +81,11 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			continue
 		}
 		inboudFunc := func(inbound tunnel.Conn) {
-			if maxCount > 0 {
-				index := currentIndex % maxCount
+			if MaxCount > 0 {
+				index := currentIndex % MaxCount
 				if con := conArr[index]; con != nil {
 					con.Close()
-					log.Debugf("YETest：超出连接限制（index:%d），关闭连接：%s", index, con.Metadata())
+					log.Debugf("YETest：maxCount:(%d)超出连接限制（index:%d），关闭连接：%s", MaxCount, index, con.Metadata())
 					conArr[index] = inbound
 					con = nil
 					runtime.GC()
@@ -94,6 +100,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			log.Debugf("YETest：count:%d,连接：%s", connectCount, inbound.Metadata())
 			defer func() {
 				inbound.Close()
+				connectCount -= 1
 				log.Debugf("YETest：连接关闭：%s", inbound.Metadata())
 			}()
 			outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
@@ -124,11 +131,13 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			}
 			log.Debug("conn relay ends")
 		}
-		go pool.Process(func() {
-			inboudFunc(inbound)
-		})
-		// go inboudFunc(inbound)
-
+		if pool == nil {
+			go inboudFunc(inbound)
+		} else {
+			go pool.Process(func() {
+				inboudFunc(inbound)
+			})
+		}
 	}
 }
 

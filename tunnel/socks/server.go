@@ -130,6 +130,7 @@ func (s *Server) packetDispatchLoop() {
 			}
 		}
 		log.Debug("socks recv udp packet from", src)
+		log.Debugf("YEtest socks:读取数据：%s,length:%d", src, n)
 		s.mappingLock.RLock()
 		conn, found := s.mapping[src.String()]
 		s.mappingLock.RUnlock()
@@ -195,6 +196,7 @@ func (s *Server) packetDispatchLoop() {
 			},
 			payload: payload[:length],
 		}:
+			log.Debugf("YETest socks:写入数据%s,length:%d,src:%s", address, length, conn.src)
 			runtime.GC()
 			debug.FreeOSMemory()
 		default:
