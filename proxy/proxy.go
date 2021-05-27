@@ -48,70 +48,74 @@ func (p *Proxy) Close() error {
 
 func (p *Proxy) relayConnLoop() {
 	for _, source := range p.sources {
-		go func(source tunnel.Server) {
-			var connectCount = 0
-			var currentIndex = 0
-			maxCount := 20
-			conArr := make([]tunnel.Conn, maxCount)
-			for {
-				inbound, err := source.AcceptConn(nil)
-				if err != nil {
-					select {
-					case <-p.ctx.Done():
-						log.Debug("exiting")
-						return
-					default:
-					}
-					log.Error(common.NewError("failed to accept connection").Base(err))
-					continue
-				}
-
-				go func(inbound tunnel.Conn) {
-					index := currentIndex % maxCount
-					if con := conArr[index]; con != nil {
-						con.Close()
-						conArr[index] = inbound
-						runtime.GC()
-						debug.FreeOSMemory()
-					}
-					currentIndex += 1
-					connectCount += 1
-					log.Debugf("count:%d,连接：%s", connectCount, inbound.Metadata())
-					defer func() {
-						inbound.Close()
-						conArr[index] = nil
-						currentIndex = index
-					}()
-					outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
-					if err != nil {
-						log.Error(common.NewError("proxy failed to dial connection").Base(err))
-						return
-					}
-					defer outbound.Close()
-
-					errChan := make(chan error, 2)
-					copyConn := func(a, b net.Conn) {
-						_, err := io.Copy(a, b)
-						errChan <- err
-						runtime.GC()
-						debug.FreeOSMemory()
-						return
-					}
-					go copyConn(inbound, outbound)
-					go copyConn(outbound, inbound)
-					select {
-					case err = <-errChan:
-						if err != nil {
-							log.Error(err)
-						}
-					case <-p.ctx.Done():
-						log.Debug("shutting down conn relay")
-						return
-					}
-					log.Debug("conn relay ends")
-				}(inbound)
+		go acceptTunnelConn(source, p)
+	}
+}
+func acceptTunnelConn(source tunnel.Server, p *Proxy) {
+	var connectCount = 0
+	var currentIndex = 0
+	maxCount := 10
+	conArr := make([]tunnel.Conn, maxCount)
+	for {
+		inbound, err := source.AcceptConn(nil)
+		if err != nil {
+			select {
+			case <-p.ctx.Done():
+				log.Debug("exiting")
+				return
+			default:
 			}
-		}(source)
+			log.Error(common.NewError("failed to accept connection").Base(err))
+			continue
+		}
+		go func(inbound tunnel.Conn) {
+			index := currentIndex % maxCount
+			if con := conArr[index]; con != nil {
+				con.Close()
+				log.Debugf("YETest：超出连接限制（index:%d），关闭连接：%s", index, con.Metadata())
+				conArr[index] = inbound
+				con = nil
+				runtime.GC()
+				debug.FreeOSMemory()
+
+			} else {
+				conArr[index] = inbound
+			}
+			currentIndex += 1
+			connectCount += 1
+			log.Debugf("YETest：count:%d,连接：%s", connectCount, inbound.Metadata())
+			defer func() {
+				inbound.Close()
+				log.Debugf("YETest：连接关闭：%s", inbound.Metadata())
+			}()
+			outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
+			if err != nil {
+				log.Error(common.NewError("proxy failed to dial connection").Base(err))
+				return
+			}
+			defer outbound.Close()
+
+			errChan := make(chan error, 2)
+			copyConn := func(a, b net.Conn) {
+				_, err := io.Copy(a, b)
+				errChan <- err
+				runtime.GC()
+				debug.FreeOSMemory()
+				return
+			}
+			go copyConn(inbound, outbound)
+			go copyConn(outbound, inbound)
+			select {
+			case err = <-errChan:
+				if err != nil {
+					log.Error(err)
+				}
+			case <-p.ctx.Done():
+				log.Debug("shutting down conn relay")
+				return
+			}
+			log.Debug("conn relay ends")
+		}(inbound)
 	}
 }
 
