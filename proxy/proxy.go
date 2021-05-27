@@ -10,6 +10,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/Jeffail/tunny"
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
 	"github.com/p4gefau1t/trojan-go/log"
@@ -54,8 +55,13 @@ func (p *Proxy) relayConnLoop() {
 func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	var connectCount = 0
 	var currentIndex = 0
-	maxCount := 10
+	maxCount := 13
 	conArr := make([]tunnel.Conn, maxCount)
+	pool := tunny.NewFunc(maxCount+2, func(p interface{}) interface{} {
+		f := p.(func())
+		f()
+		return true
+	})
 	for {
 		inbound, err := source.AcceptConn(nil)
 		if err != nil {
@@ -68,20 +74,22 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			log.Error(common.NewError("failed to accept connection").Base(err))
 			continue
 		}
-		go func(inbound tunnel.Conn) {
-			index := currentIndex % maxCount
-			if con := conArr[index]; con != nil {
-				con.Close()
-				log.Debugf("YETest：超出连接限制（index:%d），关闭连接：%s", index, con.Metadata())
-				conArr[index] = inbound
-				con = nil
-				runtime.GC()
-				debug.FreeOSMemory()
+		inboudFunc := func(inbound tunnel.Conn) {
+			if maxCount > 0 {
+				index := currentIndex % maxCount
+				if con := conArr[index]; con != nil {
+					con.Close()
+					log.Debugf("YETest：超出连接限制（index:%d），关闭连接：%s", index, con.Metadata())
+					conArr[index] = inbound
+					con = nil
+					runtime.GC()
+					debug.FreeOSMemory()
 
-			} else {
-				conArr[index] = inbound
+				} else {
+					conArr[index] = inbound
+				}
+				currentIndex += 1
 			}
-			currentIndex += 1
 			connectCount += 1
 			log.Debugf("YETest：count:%d,连接：%s", connectCount, inbound.Metadata())
 			defer func() {
@@ -115,7 +123,12 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				return
 			}
 			log.Debug("conn relay ends")
-		}(inbound)
+		}
+		go pool.Process(func() {
+			inboudFunc(inbound)
+		})
+		// go inboudFunc(inbound)
+
 	}
 }
 
@@ -136,6 +149,7 @@ func (p *Proxy) relayPacketLoop() {
 				}
 				go func(inbound tunnel.PacketConn) {
 					defer inbound.Close()
+					log.Debug("YeTest:接收包")
 					outbound, err := p.sink.DialPacket(nil)
 					if err != nil {
 						log.Error(common.NewError("proxy failed to dial packet").Base(err))
