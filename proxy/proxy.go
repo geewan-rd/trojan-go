@@ -67,14 +67,14 @@ func addConn(conn tunnel.Conn, index int) {
 }
 func closeAllConn() {
 	printMemery()
-	lck.Lock()
+	// lck.Lock()
 	for _, conn := range conArr {
 		if conn != nil {
 			conn.Close()
 		}
 
 	}
-	lck.Unlock()
+	// lck.Unlock()
 	runtime.GC()
 	debug.FreeOSMemory()
 }
@@ -104,6 +104,12 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			log.Error(common.NewError("failed to accept connection").Base(err))
 			continue
 		}
+		if !canRun() {
+			inbound.Close()
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+
 		inboudFunc := func(inbound tunnel.Conn) {
 			if MaxCount > 0 {
 				index := currentIndex % MaxCount
@@ -122,17 +128,20 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			}
 			connectCount += 1
 			log.Debugf("YETest：count:%d,连接：%s", connectCount, inbound.Metadata())
+
+			outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
 			defer func() {
 				inbound.Close()
+				if outbound != nil {
+					outbound.Close()
+				}
 				connectCount -= 1
 				log.Debugf("YETest：连接关闭：%s", inbound.Metadata())
 			}()
-			outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
 			if err != nil {
 				log.Error(common.NewError("proxy failed to dial connection").Base(err))
 				return
 			}
-			defer outbound.Close()
 
 			errChan := make(chan error, 2)
 			copyConn := func(a, b net.Conn) {
@@ -165,6 +174,22 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	}
 }
 
+var packetBound = []tunnel.PacketConn{}
+
+func addPacketBound(conn tunnel.PacketConn) {
+	lck.Lock()
+	packetBound = append(packetBound, conn)
+	lck.Unlock()
+}
+func removeAllBound() {
+	// lck.Lock()
+	for _, conn := range packetBound {
+		conn.Close()
+	}
+	packetBound = []tunnel.PacketConn{}
+	// lck.Unlock()
+}
+
 func (p *Proxy) relayPacketLoop() {
 	for _, source := range p.sources {
 		go func(source tunnel.Server) {
@@ -189,26 +214,30 @@ func (p *Proxy) relayPacketLoop() {
 						return
 					}
 					defer outbound.Close()
+					// addPacketBound(inbound)
+					// addPacketBound(outbound)
+
 					errChan := make(chan error, 2)
 					copyPacket := func(a, b tunnel.PacketConn) {
 						for {
 							buf := make([]byte, MaxPacketSize)
 							runtime.GC()
 							debug.FreeOSMemory()
-							n, metadata, err := a.ReadWithMetadata(buf)
+							n1, metadata, err := a.ReadWithMetadata(buf)
 							if err != nil {
 								errChan <- err
 								return
 							}
-							if n == 0 {
+							if n1 == 0 {
 								errChan <- nil
 								return
 							}
-							n, err = b.WriteWithMetadata(buf[:n], metadata)
-							if err != nil {
-								errChan <- err
+							n2, err1 := b.WriteWithMetadata(buf[:n1], metadata)
+							if err1 != nil {
+								errChan <- err1
 								return
 							}
+							log.Debugf("YeTestaaaa读写buff:write(%d),read(%d)", n1, n2)
 						}
 					}
 					go copyPacket(inbound, outbound)
@@ -284,6 +313,15 @@ func stopAllConn() {
 	closeAllConn()
 	time.Sleep(1 * time.Second)
 }
+
+var isResting = false
+
+func canRun() bool {
+	// lck.Lock()
+	var lock = !isResting
+	// lck.Unlock()
+	return lock
+}
 func AutoResetMemery() {
 	if isAutoResetMemerying {
 		return
@@ -295,13 +333,16 @@ func AutoResetMemery() {
 			time.Sleep(100 * time.Millisecond)
 			var info runtime.MemStats
 			runtime.ReadMemStats(&info)
-			if info.Alloc > 25*100000 {
+			if info.Alloc > 26*100000 {
 				log.Debugf("YeTest准备释放内存:alloc:%d,heapAlloc:%d", info.Alloc, info.HeapAlloc)
-				stopAllConn()
-				log.Debug("YeTest:关闭所有连接")
+
 				lck.Lock()
+				isResting = true
 				var count = 0
 				for {
+					stopAllConn()
+					removeAllBound()
+					log.Debug("YeTest:关闭所有连接")
 					count += 1
 					var info1 runtime.MemStats
 					runtime.ReadMemStats(&info1)
@@ -311,8 +352,11 @@ func AutoResetMemery() {
 						log.Debugf("YeTest释放内存已达到%f\\%", (1-value)*100)
 						break
 					}
+					runtime.GC()
+					debug.FreeOSMemory()
 					time.Sleep(100 * time.Millisecond)
 				}
+				isResting = false
 				lck.Unlock()
 				printMemery()
 			}
