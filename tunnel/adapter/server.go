@@ -24,10 +24,18 @@ type Server struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 }
+type CanRunFunc func() bool
+
+var CanRun CanRunFunc
 
 func (s *Server) acceptConnLoop() {
 	for {
 		conn, err := s.tcpListener.Accept()
+		if CanRun != nil {
+			if !CanRun() {
+				continue
+			}
+		}
 		if err != nil {
 			select {
 			case <-s.ctx.Done():

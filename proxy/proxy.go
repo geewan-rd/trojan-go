@@ -17,6 +17,7 @@ import (
 	"github.com/p4gefau1t/trojan-go/config"
 	"github.com/p4gefau1t/trojan-go/log"
 	"github.com/p4gefau1t/trojan-go/tunnel"
+	"github.com/p4gefau1t/trojan-go/tunnel/adapter"
 )
 
 const Name = "PROXY"
@@ -68,11 +69,11 @@ func addConn(conn tunnel.Conn, index int) {
 func closeAllConn() {
 	printMemery()
 	// lck.Lock()
-	for _, conn := range conArr {
+	for i, conn := range conArr {
 		if conn != nil {
 			conn.Close()
 		}
-
+		conArr[i] = nil
 	}
 	// lck.Unlock()
 	runtime.GC()
@@ -90,6 +91,9 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			f()
 			return true
 		})
+		adapter.CanRun = func() bool {
+			return canRun()
+		}
 	}
 
 	for {
@@ -104,11 +108,11 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			log.Error(common.NewError("failed to accept connection").Base(err))
 			continue
 		}
-		if !canRun() {
-			inbound.Close()
-			time.Sleep(200 * time.Millisecond)
-			continue
-		}
+		// if !canRun() {
+		// 	inbound.Close()
+		// 	time.Sleep(200 * time.Millisecond)
+		// 	continue
+		// }
 
 		inboudFunc := func(inbound tunnel.Conn) {
 			if MaxCount > 0 {
@@ -137,6 +141,8 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				}
 				connectCount -= 1
 				log.Debugf("YETest：连接关闭：%s", inbound.Metadata())
+				runtime.GC()
+				debug.FreeOSMemory()
 			}()
 			if err != nil {
 				log.Error(common.NewError("proxy failed to dial connection").Base(err))
@@ -162,6 +168,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				log.Debug("shutting down conn relay")
 				return
 			}
+
 			log.Debug("conn relay ends")
 		}
 		if pool == nil {
@@ -223,6 +230,9 @@ func (p *Proxy) relayPacketLoop() {
 							buf := make([]byte, MaxPacketSize)
 							runtime.GC()
 							debug.FreeOSMemory()
+							if !canRun() {
+								continue
+							}
 							n1, metadata, err := a.ReadWithMetadata(buf)
 							if err != nil {
 								errChan <- err
@@ -317,9 +327,9 @@ func stopAllConn() {
 var isResting = false
 
 func canRun() bool {
-	// lck.Lock()
+	lck.Lock()
 	var lock = !isResting
-	// lck.Unlock()
+	lck.Unlock()
 	return lock
 }
 func AutoResetMemery() {
@@ -333,7 +343,8 @@ func AutoResetMemery() {
 			time.Sleep(100 * time.Millisecond)
 			var info runtime.MemStats
 			runtime.ReadMemStats(&info)
-			if info.Alloc > 26*100000 {
+			var limit uint64 = 26 * 100000
+			if info.Alloc > limit {
 				log.Debugf("YeTest准备释放内存:alloc:%d,heapAlloc:%d", info.Alloc, info.HeapAlloc)
 
 				lck.Lock()
@@ -346,10 +357,9 @@ func AutoResetMemery() {
 					count += 1
 					var info1 runtime.MemStats
 					runtime.ReadMemStats(&info1)
-					value := float64(info1.Alloc) / float64(info.Alloc)
 					log.Debugf("YeTest释放后内存:alloc:%d,heapAlloc:%d count:%d", info1.Alloc, info1.HeapAlloc, count)
-					if value < 0.8 {
-						log.Debugf("YeTest释放内存已达到%f\\%", (1-value)*100)
+					if info1.Alloc < limit*8/10 {
+						log.Debugf("YeTest释放内存已达到%d", info1.Alloc)
 						break
 					}
 					runtime.GC()
