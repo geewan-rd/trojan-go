@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Jeffail/tunny"
 	"github.com/p4gefau1t/trojan-go/common"
@@ -54,11 +56,33 @@ func (p *Proxy) relayConnLoop() {
 }
 
 var MaxCount = 0
+var conArr []tunnel.Conn
+var lck sync.Mutex
+
+func addConn(conn tunnel.Conn, index int) {
+	printMemery()
+	lck.Lock()
+	conArr[index] = conn
+	lck.Unlock()
+}
+func closeAllConn() {
+	printMemery()
+	lck.Lock()
+	for _, conn := range conArr {
+		if conn != nil {
+			conn.Close()
+		}
+
+	}
+	lck.Unlock()
+	runtime.GC()
+	debug.FreeOSMemory()
+}
 
 func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	var connectCount = 0
 	var currentIndex = 0
-	conArr := make([]tunnel.Conn, MaxCount)
+	conArr = make([]tunnel.Conn, MaxCount)
 	var pool *tunny.Pool
 	if MaxCount > 0 {
 		pool = tunny.NewFunc(MaxCount+2, func(p interface{}) interface{} {
@@ -83,17 +107,17 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		inboudFunc := func(inbound tunnel.Conn) {
 			if MaxCount > 0 {
 				index := currentIndex % MaxCount
+				lck.Lock()
 				if con := conArr[index]; con != nil {
 					con.Close()
 					log.Debugf("YETest：maxCount:(%d)超出连接限制（index:%d），关闭连接：%s", MaxCount, index, con.Metadata())
-					conArr[index] = inbound
 					con = nil
 					runtime.GC()
 					debug.FreeOSMemory()
 
-				} else {
-					conArr[index] = inbound
 				}
+				lck.Unlock()
+				addConn(inbound, index)
 				currentIndex += 1
 			}
 			connectCount += 1
@@ -252,4 +276,51 @@ func NewProxyFromConfigData(data []byte, isJSON bool) (*Proxy, error) {
 		log.SetOutput(file)
 	}
 	return create(ctx)
+}
+
+var isAutoResetMemerying = false
+
+func stopAllConn() {
+	closeAllConn()
+	time.Sleep(1 * time.Second)
+}
+func AutoResetMemery() {
+	if isAutoResetMemerying {
+		return
+	}
+	isAutoResetMemerying = true
+	go func() {
+
+		for {
+			time.Sleep(100 * time.Millisecond)
+			var info runtime.MemStats
+			runtime.ReadMemStats(&info)
+			if info.Alloc > 25*100000 {
+				log.Debugf("YeTest准备释放内存:alloc:%d,heapAlloc:%d", info.Alloc, info.HeapAlloc)
+				stopAllConn()
+				log.Debug("YeTest:关闭所有连接")
+				lck.Lock()
+				var count = 0
+				for {
+					count += 1
+					var info1 runtime.MemStats
+					runtime.ReadMemStats(&info1)
+					value := float64(info1.Alloc) / float64(info.Alloc)
+					log.Debugf("YeTest释放后内存:alloc:%d,heapAlloc:%d count:%d", info1.Alloc, info1.HeapAlloc, count)
+					if value < 0.8 {
+						log.Debugf("YeTest释放内存已达到%f\\%", (1-value)*100)
+						break
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+				lck.Unlock()
+				printMemery()
+			}
+		}
+	}()
+}
+func printMemery() {
+	var info runtime.MemStats
+	runtime.ReadMemStats(&info)
+	log.Debugf("YeTest当前内存:alloc:%d,heapAlloc:%d", info.Alloc, info.HeapAlloc)
 }

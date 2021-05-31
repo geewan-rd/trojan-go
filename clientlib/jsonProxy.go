@@ -59,9 +59,12 @@ func TestStopProxy() {
 }
 
 var currentProxy *proxy.Proxy
+var cachJsonData []byte
 
 func StartProxyWithData(jsonData []byte) error {
 	var data = jsonData
+	cachJsonData = make([]byte, len(jsonData))
+	copy(cachJsonData, jsonData)
 	pr, err := proxy.NewProxyFromConfigData(data, true)
 	if err != nil {
 		fmt.Print("error:%@", err.Error())
@@ -74,9 +77,27 @@ func StartProxyWithData(jsonData []byte) error {
 		if value != nil {
 			proxy.MaxCount = int(value.(float64))
 		}
+		value = dat["DebugAlloc"]
+		if value != nil {
+			if value.(bool) == true {
+				debugShowAlloc()
+			}
+		}
+		value = dat["autoResetMemery"]
+		if value != nil {
+			if value.(bool) == true {
+				proxy.AutoResetMemery()
+			}
+		}
 	}
 	go log.Info("StartProxyWithData")
 	currentProxy = pr
+	// go func() {
+	// 	time.Sleep(10 * time.Second)
+	// 	go pr.Close()
+	// 	time.Sleep(1 * time.Second)
+	// 	go StartProxyWithData(data)
+	// }()
 	err = pr.Run()
 	if err != nil {
 		log.Fatal(err)
@@ -100,4 +121,29 @@ func getJson(b []byte) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return dat, nil
+}
+
+var isDebugShowAlloc = false
+
+func debugShowAlloc() {
+	if isDebugShowAlloc {
+		return
+	}
+	isDebugShowAlloc = true
+	go func() {
+		for {
+			time.Sleep(500 * time.Millisecond)
+			var info runtime.MemStats
+			runtime.ReadMemStats(&info)
+			log.Debugf("YeTest:alloc:%d,heapAlloc:%d", info.Alloc, info.HeapAlloc)
+		}
+	}()
+}
+func ReStart() {
+
+	go currentProxy.Close()
+	runtime.GC()
+	debug.FreeOSMemory()
+	time.Sleep(1000 * time.Millisecond)
+	go StartProxyWithData(cachJsonData)
 }

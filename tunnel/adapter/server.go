@@ -37,6 +37,7 @@ func (s *Server) acceptConnLoop() {
 				continue
 			}
 		}
+		log.Debugf("YeTest:socks5 src %s,remote:%s", conn.LocalAddr(), conn.RemoteAddr())
 		rewindConn := common.NewRewindConn(conn)
 		rewindConn.SetBufferSize(16)
 		buf := [3]byte{}
