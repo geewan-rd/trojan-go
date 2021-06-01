@@ -76,8 +76,7 @@ func closeAllConn() {
 		conArr[i] = nil
 	}
 	// lck.Unlock()
-	runtime.GC()
-	debug.FreeOSMemory()
+	gc()
 }
 
 func acceptTunnelConn(source tunnel.Server, p *Proxy) {
@@ -122,8 +121,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 					con.Close()
 					log.Debugf("YETest：maxCount:(%d)超出连接限制（index:%d），关闭连接：%s", MaxCount, index, con.Metadata())
 					con = nil
-					runtime.GC()
-					debug.FreeOSMemory()
+					gc()
 
 				}
 				lck.Unlock()
@@ -141,8 +139,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				}
 				connectCount -= 1
 				log.Debugf("YETest：连接关闭：%s", inbound.Metadata())
-				runtime.GC()
-				debug.FreeOSMemory()
+				gc()
 			}()
 			if err != nil {
 				log.Error(common.NewError("proxy failed to dial connection").Base(err))
@@ -153,8 +150,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			copyConn := func(a, b net.Conn) {
 				_, err := io.Copy(a, b)
 				errChan <- err
-				runtime.GC()
-				debug.FreeOSMemory()
+				gc()
 				return
 			}
 			go copyConn(inbound, outbound)
@@ -228,8 +224,7 @@ func (p *Proxy) relayPacketLoop() {
 					copyPacket := func(a, b tunnel.PacketConn) {
 						for {
 							buf := make([]byte, MaxPacketSize)
-							runtime.GC()
-							debug.FreeOSMemory()
+							gc()
 							if !canRun() {
 								continue
 							}
@@ -362,8 +357,7 @@ func AutoResetMemery() {
 						log.Debugf("YeTest释放内存已达到%d", info1.Alloc)
 						break
 					}
-					runtime.GC()
-					debug.FreeOSMemory()
+					gc()
 					time.Sleep(100 * time.Millisecond)
 				}
 				isResting = false
@@ -372,6 +366,9 @@ func AutoResetMemery() {
 			}
 		}
 	}()
+}
+func gc() {
+	debug.FreeOSMemory()
 }
 func printMemery() {
 	var info runtime.MemStats

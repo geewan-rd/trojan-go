@@ -90,6 +90,7 @@ func StartProxyWithData(jsonData []byte) error {
 			}
 		}
 	}
+	debug.SetGCPercent(10)
 	go log.Info("StartProxyWithData")
 	currentProxy = pr
 	// go func() {

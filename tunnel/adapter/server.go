@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
@@ -30,12 +31,14 @@ var CanRun CanRunFunc
 
 func (s *Server) acceptConnLoop() {
 	for {
-		conn, err := s.tcpListener.Accept()
 		if CanRun != nil {
 			if !CanRun() {
 				continue
 			}
 		}
+		time.Sleep(100 * time.Millisecond)
+		conn, err := s.tcpListener.Accept()
+
 		if err != nil {
 			select {
 			case <-s.ctx.Done():

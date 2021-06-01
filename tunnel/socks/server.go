@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Jeffail/tunny"
+	_ "github.com/Jeffail/tunny"
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
 	"github.com/p4gefau1t/trojan-go/log"
@@ -207,13 +209,20 @@ func (s *Server) packetDispatchLoop() {
 
 ///socks5 连接 接收loop
 func (s *Server) acceptLoop() {
+
+	pool := tunny.NewFunc(2, func(p interface{}) interface{} {
+		f := p.(func())
+		f()
+		return true
+	})
 	for {
+		time.Sleep(100 * time.Millisecond)
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
 		if err != nil {
 			log.Error(common.NewError("socks accept err").Base(err))
 			return
 		}
-		go func(conn net.Conn) {
+		confunc := func(conn net.Conn) {
 			newConn, err := s.handshake(conn)
 			runtime.GC()
 			debug.FreeOSMemory()
@@ -245,7 +254,14 @@ func (s *Server) acceptLoop() {
 				log.Error(common.NewError(fmt.Sprintf("unknown socks command %d", newConn.metadata.Command)))
 				newConn.Close()
 			}
-		}(conn)
+		}
+		if pool != nil {
+			pool.Process(func() {
+				confunc(conn)
+			})
+		} else {
+			go confunc(conn)
+		}
 	}
 }
 
