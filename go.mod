@@ -16,6 +16,7 @@ require (
 	github.com/v2fly/v2ray-core/v4 v4.38.3
 	github.com/xtaci/smux v1.5.15
 	golang.org/x/crypto v0.0.0-20210503195802-e9a32991a82e
+	golang.org/x/mobile v0.0.0-20210527171505-7e972142eb43 // indirect
 	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420
 	golang.org/x/sys v0.0.0-20210521203332-0cec03c779c1 // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
@@ -25,5 +26,3 @@ require (
 )
 
 replace github.com/shadowsocks/go-shadowsocks2 => github.com/geewan-rd/go-shadowsocks2 v1.3.1
-
-
