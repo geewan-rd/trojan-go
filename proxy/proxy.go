@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"io"
 	"math/rand"
 	"net"
 	"os"
@@ -66,6 +65,16 @@ func addConn(conn tunnel.Conn, index int) {
 	conArr[index] = conn
 	lck.Unlock()
 }
+func removeConn(conn tunnel.Conn) {
+	lck.Lock()
+	for i, con := range conArr {
+		if con == conn {
+			conArr[i] = nil
+			break
+		}
+	}
+	lck.Unlock()
+}
 func closeAllConn() {
 	printMemery()
 	// lck.Lock()
@@ -114,14 +123,13 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		// }
 
 		inboudFunc := func(inbound tunnel.Conn) {
+			index := currentIndex % MaxCount
 			if MaxCount > 0 {
-				index := currentIndex % MaxCount
 				lck.Lock()
 				if con := conArr[index]; con != nil {
 					con.Close()
 					log.Debugf("YETest：maxCount:(%d)超出连接限制（index:%d），关闭连接：%s", MaxCount, index, con.Metadata())
 					con = nil
-					gc()
 
 				}
 				lck.Unlock()
@@ -137,8 +145,11 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				if outbound != nil {
 					outbound.Close()
 				}
+				removeConn(inbound)
 				connectCount -= 1
 				log.Debugf("YETest：连接关闭：%s", inbound.Metadata())
+				inbound = nil
+				outbound = nil
 				gc()
 			}()
 			if err != nil {
@@ -147,15 +158,32 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			}
 
 			errChan := make(chan error, 2)
+			interval := 3 * time.Second
+			heartbeatTimer := time.NewTimer(interval)
 			copyConn := func(a, b net.Conn) {
-				_, err := io.Copy(a, b)
+				for {
+					buf := make([]byte, 5000)
+					gc()
+					var n int
+					n, err = b.Read(buf)
+					if err != nil {
+						break
+					}
+					_, err = a.Write(buf[:n])
+					if err != nil {
+						break
+					}
+					heartbeatTimer.Reset(interval)
+				}
+				// _, err := io.Copy(a, b)
 				errChan <- err
 				gc()
-				return
 			}
 			go copyConn(inbound, outbound)
 			go copyConn(outbound, inbound)
 			select {
+			case <-heartbeatTimer.C:
+				log.Debugf("conn:%s,timeout", inbound.Metadata())
 			case err = <-errChan:
 				if err != nil {
 					log.Error(err)
