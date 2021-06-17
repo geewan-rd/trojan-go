@@ -62,6 +62,11 @@ var lck sync.Mutex
 func addConn(conn tunnel.Conn, index int) {
 	printMemery()
 	lck.Lock()
+	if con := conArr[index]; con != nil {
+		con.Close()
+		log.Debugf("YETest：maxCount:(%d)超出连接限制（index:%d），关闭连接：%s", MaxCount, index, con.Metadata())
+		con = nil
+	}
 	conArr[index] = conn
 	lck.Unlock()
 }
@@ -125,14 +130,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		inboudFunc := func(inbound tunnel.Conn) {
 			index := currentIndex % MaxCount
 			if MaxCount > 0 {
-				lck.Lock()
-				if con := conArr[index]; con != nil {
-					con.Close()
-					log.Debugf("YETest：maxCount:(%d)超出连接限制（index:%d），关闭连接：%s", MaxCount, index, con.Metadata())
-					con = nil
 
-				}
-				lck.Unlock()
 				addConn(inbound, index)
 				currentIndex += 1
 			}
@@ -205,22 +203,6 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	}
 }
 
-var packetBound = []tunnel.PacketConn{}
-
-func addPacketBound(conn tunnel.PacketConn) {
-	lck.Lock()
-	packetBound = append(packetBound, conn)
-	lck.Unlock()
-}
-func removeAllBound() {
-	// lck.Lock()
-	for _, conn := range packetBound {
-		conn.Close()
-	}
-	packetBound = []tunnel.PacketConn{}
-	// lck.Unlock()
-}
-
 func (p *Proxy) relayPacketLoop() {
 	for _, source := range p.sources {
 		go func(source tunnel.Server) {
@@ -236,6 +218,8 @@ func (p *Proxy) relayPacketLoop() {
 					log.Error(common.NewError("failed to accept packet").Base(err))
 					continue
 				}
+				interval := 3 * time.Second
+				heartbeatTimer := time.NewTimer(interval)
 				go func(inbound tunnel.PacketConn) {
 					defer inbound.Close()
 					log.Debug("YeTest:接收包")
@@ -253,9 +237,6 @@ func (p *Proxy) relayPacketLoop() {
 						for {
 							buf := make([]byte, MaxPacketSize)
 							gc()
-							if !canRun() {
-								continue
-							}
 							n1, metadata, err := a.ReadWithMetadata(buf)
 							if err != nil {
 								errChan <- err
@@ -270,12 +251,15 @@ func (p *Proxy) relayPacketLoop() {
 								errChan <- err1
 								return
 							}
+							heartbeatTimer.Reset(interval)
 							log.Debugf("YeTestaaaa读写buff:write(%d),read(%d)", n1, n2)
 						}
 					}
 					go copyPacket(inbound, outbound)
 					go copyPacket(outbound, inbound)
 					select {
+					case <-heartbeatTimer.C:
+						log.Debug("conn:%s,packet relay timeout", inbound.LocalAddr())
 					case err = <-errChan:
 						if err != nil {
 							log.Error(err)
@@ -375,7 +359,6 @@ func AutoResetMemery() {
 				var count = 0
 				for {
 					stopAllConn()
-					removeAllBound()
 					log.Debug("YeTest:关闭所有连接")
 					count += 1
 					var info1 runtime.MemStats

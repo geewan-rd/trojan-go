@@ -7,15 +7,16 @@ import (
 	"github.com/p4gefau1t/trojan-go/proxy"
 	"github.com/p4gefau1t/trojan-go/tunnel/adapter"
 	"github.com/p4gefau1t/trojan-go/tunnel/http"
-	"github.com/p4gefau1t/trojan-go/tunnel/mux"
-	"github.com/p4gefau1t/trojan-go/tunnel/router"
-	"github.com/p4gefau1t/trojan-go/tunnel/shadowsocks"
-	"github.com/p4gefau1t/trojan-go/tunnel/simplesocks"
+
+	// "github.com/p4gefau1t/trojan-go/tunnel/mux"
+	// "github.com/p4gefau1t/trojan-go/tunnel/router"
+	// "github.com/p4gefau1t/trojan-go/tunnel/shadowsocks"
+
 	"github.com/p4gefau1t/trojan-go/tunnel/socks"
 	"github.com/p4gefau1t/trojan-go/tunnel/tls"
 	"github.com/p4gefau1t/trojan-go/tunnel/transport"
 	"github.com/p4gefau1t/trojan-go/tunnel/trojan"
-	"github.com/p4gefau1t/trojan-go/tunnel/websocket"
+	// "github.com/p4gefau1t/trojan-go/tunnel/websocket"
 )
 
 const Name = "CLIENT"
@@ -27,17 +28,17 @@ func GenerateClientTree(transportPlugin bool, muxEnabled bool, wsEnabled bool, s
 		clientStack = append(clientStack, tls.Name)
 	}
 	if wsEnabled {
-		clientStack = append(clientStack, websocket.Name)
+		// clientStack = append(clientStack, websocket.Name)
 	}
 	if ssEnabled {
-		clientStack = append(clientStack, shadowsocks.Name)
+		// clientStack = append(clientStack, shadowsocks.Name)
 	}
 	clientStack = append(clientStack, trojan.Name)
 	if muxEnabled {
-		clientStack = append(clientStack, []string{mux.Name, simplesocks.Name}...)
+		// clientStack = append(clientStack, []string{mux.Name, simplesocks.Name}...)
 	}
 	if routerEnabled {
-		clientStack = append(clientStack, router.Name)
+		// clientStack = append(clientStack, router.Name)
 	}
 	return clientStack
 }
