@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	// tun2socksClient "github.com/eycorsican/go-tun2socks/clientlib/mobile"
 	"github.com/p4gefau1t/trojan-go/log"
 	_ "github.com/p4gefau1t/trojan-go/log/golog"
 	"github.com/p4gefau1t/trojan-go/proxy"
@@ -148,3 +149,10 @@ func ReStart() {
 	time.Sleep(1000 * time.Millisecond)
 	go StartProxyWithData(cachJsonData)
 }
+
+// func InputPacket(data []byte) {
+// 	tun2socksClient.InputPacket(data)
+// }
+// func StartSocks(proxyHost string, proxyPort int, output tun2socksClient.OutputFunc) {
+// 	tun2socksClient.StartSocks(proxyHost, proxyPort, output)
+// }
