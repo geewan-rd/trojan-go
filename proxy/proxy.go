@@ -128,9 +128,9 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		// }
 
 		inboudFunc := func(inbound tunnel.Conn) {
-			index := currentIndex % MaxCount
-			if MaxCount > 0 {
 
+			if MaxCount > 0 {
+				index := currentIndex % MaxCount
 				addConn(inbound, index)
 				currentIndex += 1
 			}
