@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
@@ -25,18 +24,9 @@ type Server struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 }
-type CanRunFunc func() bool
-
-var CanRun CanRunFunc
 
 func (s *Server) acceptConnLoop() {
 	for {
-		if CanRun != nil {
-			if !CanRun() {
-				continue
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
 		conn, err := s.tcpListener.Accept()
 
 		if err != nil {

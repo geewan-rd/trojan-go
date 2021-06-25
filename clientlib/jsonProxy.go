@@ -78,21 +78,8 @@ func StartProxyWithData(jsonData []byte) error {
 		if value != nil {
 			proxy.MaxCount = int(value.(float64))
 		}
-		value = dat["DebugAlloc"]
-		if value != nil {
-			if value.(bool) == true {
-				debugShowAlloc()
-			}
-		}
-		value = dat["autoResetMemery"]
-		if value != nil {
-			if value.(bool) == true {
-				proxy.AutoResetMemery()
-			}
-		}
 	}
 	debug.SetGCPercent(10)
-	go log.Info("StartProxyWithData")
 	currentProxy = pr
 	// go func() {
 	// 	time.Sleep(10 * time.Second)

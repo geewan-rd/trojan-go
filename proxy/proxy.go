@@ -16,13 +16,12 @@ import (
 	"github.com/p4gefau1t/trojan-go/config"
 	"github.com/p4gefau1t/trojan-go/log"
 	"github.com/p4gefau1t/trojan-go/tunnel"
-	"github.com/p4gefau1t/trojan-go/tunnel/adapter"
 )
 
 const Name = "PROXY"
 
 const (
-	MaxPacketSize = 1024 * 8
+	MaxPacketSize = 1024 * 12
 )
 
 // Proxy relay connections and packets
@@ -56,57 +55,38 @@ func (p *Proxy) relayConnLoop() {
 }
 
 var MaxCount = 0
-var conArr []tunnel.Conn
-var lck sync.Mutex
-
-func addConn(conn tunnel.Conn, index int) {
-	printMemery()
-	lck.Lock()
-	if con := conArr[index]; con != nil {
-		con.Close()
-		log.Debugf("YETest：maxCount:(%d)超出连接限制（index:%d），关闭连接：%s", MaxCount, index, con.Metadata())
-		con = nil
-	}
-	conArr[index] = conn
-	lck.Unlock()
-}
-func removeConn(conn tunnel.Conn) {
-	lck.Lock()
-	for i, con := range conArr {
-		if con == conn {
-			conArr[i] = nil
-			break
-		}
-	}
-	lck.Unlock()
-}
-func closeAllConn() {
-	printMemery()
-	// lck.Lock()
-	for i, conn := range conArr {
-		if conn != nil {
-			conn.Close()
-		}
-		conArr[i] = nil
-	}
-	// lck.Unlock()
-	gc()
-}
 
 func acceptTunnelConn(source tunnel.Server, p *Proxy) {
-	var connectCount = 0
 	var currentIndex = 0
-	conArr = make([]tunnel.Conn, MaxCount)
+	conArr := make([]tunnel.Conn, MaxCount)
+	var lck sync.Mutex
+	addConn := func(conn tunnel.Conn, index int) {
+		if MaxCount > 0 {
+			lck.Lock()
+			var alloc = getMemAlloc()
+			if alloc > 1000000 {
+				for i, con := range conArr {
+					if con != nil {
+						con.Close()
+						conArr[i] = nil
+					}
+
+				}
+				time.Sleep(500 * time.Microsecond)
+			} else if con := conArr[index]; con != nil {
+				con.Close()
+			}
+			conArr[index] = conn
+			lck.Unlock()
+		}
+	}
 	var pool *tunny.Pool
 	if MaxCount > 0 {
-		pool = tunny.NewFunc(MaxCount+2, func(p interface{}) interface{} {
-			f := p.(func())
-			f()
-			return true
-		})
-		adapter.CanRun = func() bool {
-			return canRun()
-		}
+		// pool = tunny.NewFunc(MaxCount+2, func(p interface{}) interface{} {
+		// 	f := p.(func())
+		// 	f()
+		// 	return true
+		// })
 	}
 
 	for {
@@ -121,21 +101,12 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			log.Error(common.NewError("failed to accept connection").Base(err))
 			continue
 		}
-		// if !canRun() {
-		// 	inbound.Close()
-		// 	time.Sleep(200 * time.Millisecond)
-		// 	continue
-		// }
-
+		if MaxCount > 0 {
+			index := currentIndex % MaxCount
+			addConn(inbound, index)
+			currentIndex += 1
+		}
 		inboudFunc := func(inbound tunnel.Conn) {
-
-			if MaxCount > 0 {
-				index := currentIndex % MaxCount
-				addConn(inbound, index)
-				currentIndex += 1
-			}
-			connectCount += 1
-			log.Debugf("YETest：count:%d,连接：%s", connectCount, inbound.Metadata())
 
 			outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
 			defer func() {
@@ -143,25 +114,22 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				if outbound != nil {
 					outbound.Close()
 				}
-				removeConn(inbound)
-				connectCount -= 1
-				log.Debugf("YETest：连接关闭：%s", inbound.Metadata())
-				inbound = nil
-				outbound = nil
 				gc()
 			}()
 			if err != nil {
 				log.Error(common.NewError("proxy failed to dial connection").Base(err))
 				return
 			}
-
-			errChan := make(chan error, 2)
-			interval := 3 * time.Second
-			heartbeatTimer := time.NewTimer(interval)
 			copyConn := func(a, b net.Conn) {
+				buf := make([]byte, 512*8)
 				for {
-					buf := make([]byte, 5000)
-					gc()
+					select {
+					case <-p.ctx.Done():
+						log.Debug("shutting down conn relay")
+						return
+					default:
+					}
+					defer gc()
 					var n int
 					n, err = b.Read(buf)
 					if err != nil {
@@ -171,25 +139,10 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 					if err != nil {
 						break
 					}
-					heartbeatTimer.Reset(interval)
 				}
-				// _, err := io.Copy(a, b)
-				errChan <- err
-				gc()
 			}
 			go copyConn(inbound, outbound)
-			go copyConn(outbound, inbound)
-			select {
-			case <-heartbeatTimer.C:
-				log.Debugf("conn:%s,timeout", inbound.Metadata())
-			case err = <-errChan:
-				if err != nil {
-					log.Error(err)
-				}
-			case <-p.ctx.Done():
-				log.Debug("shutting down conn relay")
-				return
-			}
+			copyConn(outbound, inbound)
 
 			log.Debug("conn relay ends")
 		}
@@ -218,55 +171,44 @@ func (p *Proxy) relayPacketLoop() {
 					log.Error(common.NewError("failed to accept packet").Base(err))
 					continue
 				}
-				interval := 3 * time.Second
-				heartbeatTimer := time.NewTimer(interval)
+
 				go func(inbound tunnel.PacketConn) {
 					defer inbound.Close()
-					log.Debug("YeTest:接收包")
 					outbound, err := p.sink.DialPacket(nil)
 					if err != nil {
 						log.Error(common.NewError("proxy failed to dial packet").Base(err))
 						return
 					}
 					defer outbound.Close()
-					// addPacketBound(inbound)
-					// addPacketBound(outbound)
 
-					errChan := make(chan error, 2)
 					copyPacket := func(a, b tunnel.PacketConn) {
+						buf := make([]byte, MaxPacketSize)
 						for {
-							buf := make([]byte, MaxPacketSize)
-							gc()
+							select {
+							case <-p.ctx.Done():
+								log.Debug("shutting down packet relay")
+							default:
+							}
+							defer gc()
 							n1, metadata, err := a.ReadWithMetadata(buf)
+
 							if err != nil {
-								errChan <- err
 								return
 							}
 							if n1 == 0 {
-								errChan <- nil
+
 								return
 							}
-							n2, err1 := b.WriteWithMetadata(buf[:n1], metadata)
+							_, err1 := b.WriteWithMetadata(buf[:n1], metadata)
 							if err1 != nil {
-								errChan <- err1
 								return
 							}
-							heartbeatTimer.Reset(interval)
-							log.Debugf("YeTestaaaa读写buff:write(%d),read(%d)", n1, n2)
+
 						}
 					}
 					go copyPacket(inbound, outbound)
-					go copyPacket(outbound, inbound)
-					select {
-					case <-heartbeatTimer.C:
-						log.Debug("conn:%s,packet relay timeout", inbound.LocalAddr())
-					case err = <-errChan:
-						if err != nil {
-							log.Error(err)
-						}
-					case <-p.ctx.Done():
-						log.Debug("shutting down packet relay")
-					}
+					copyPacket(outbound, inbound)
+
 					log.Debug("packet relay ends")
 				}(inbound)
 			}
@@ -324,62 +266,13 @@ func NewProxyFromConfigData(data []byte, isJSON bool) (*Proxy, error) {
 	return create(ctx)
 }
 
-var isAutoResetMemerying = false
-
-func stopAllConn() {
-	closeAllConn()
-	time.Sleep(1 * time.Second)
-}
-
-var isResting = false
-
-func canRun() bool {
-	lck.Lock()
-	var lock = !isResting
-	lck.Unlock()
-	return lock
-}
-func AutoResetMemery() {
-	if isAutoResetMemerying {
-		return
-	}
-	isAutoResetMemerying = true
-	go func() {
-
-		for {
-			time.Sleep(100 * time.Millisecond)
-			var info runtime.MemStats
-			runtime.ReadMemStats(&info)
-			var limit uint64 = 26 * 100000
-			if info.Alloc > limit {
-				log.Debugf("YeTest准备释放内存:alloc:%d,heapAlloc:%d", info.Alloc, info.HeapAlloc)
-
-				lck.Lock()
-				isResting = true
-				var count = 0
-				for {
-					stopAllConn()
-					log.Debug("YeTest:关闭所有连接")
-					count += 1
-					var info1 runtime.MemStats
-					runtime.ReadMemStats(&info1)
-					log.Debugf("YeTest释放后内存:alloc:%d,heapAlloc:%d count:%d", info1.Alloc, info1.HeapAlloc, count)
-					if info1.Alloc < limit*8/10 {
-						log.Debugf("YeTest释放内存已达到%d", info1.Alloc)
-						break
-					}
-					gc()
-					time.Sleep(100 * time.Millisecond)
-				}
-				isResting = false
-				lck.Unlock()
-				printMemery()
-			}
-		}
-	}()
-}
 func gc() {
 	debug.FreeOSMemory()
+}
+func getMemAlloc() int {
+	var info runtime.MemStats
+	runtime.ReadMemStats(&info)
+	return int(info.Alloc)
 }
 func printMemery() {
 	var info runtime.MemStats

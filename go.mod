@@ -26,4 +26,4 @@ require (
 
 replace github.com/shadowsocks/go-shadowsocks2 => github.com/geewan-rd/go-shadowsocks2 v1.3.1
 
-replace github.com/eycorsican/go-tun2socks => ../go-tun2socks
+// replace github.com/eycorsican/go-tun2socks => ../go-tun2socks
