@@ -109,6 +109,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		inboudFunc := func(inbound tunnel.Conn) {
 
 			outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
+			stopchan := make(chan int, 2)
 			defer func() {
 				inbound.Close()
 				if outbound != nil {
@@ -120,8 +121,13 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				log.Error(common.NewError("proxy failed to dial connection").Base(err))
 				return
 			}
+			interval := 2 * time.Second
+			timer := time.NewTimer(interval)
 			copyConn := func(a, b net.Conn) {
 				buf := make([]byte, 512*8)
+				defer func() {
+					stopchan <- 1
+				}()
 				for {
 					select {
 					case <-p.ctx.Done():
@@ -139,10 +145,17 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 					if err != nil {
 						break
 					}
+					timer.Reset(interval)
 				}
 			}
 			go copyConn(inbound, outbound)
-			copyConn(outbound, inbound)
+			go copyConn(outbound, inbound)
+
+			select {
+			case <-timer.C:
+				log.Debug("conn relay timeout")
+			case <-stopchan:
+			}
 
 			log.Debug("conn relay ends")
 		}
@@ -181,6 +194,10 @@ func (p *Proxy) relayPacketLoop() {
 					}
 					defer outbound.Close()
 
+					stopchan := make(chan int)
+					defer close(stopchan)
+					interval := 10 * time.Second
+					timer := time.NewTimer(interval)
 					copyPacket := func(a, b tunnel.PacketConn) {
 						buf := make([]byte, MaxPacketSize)
 						for {
@@ -203,12 +220,17 @@ func (p *Proxy) relayPacketLoop() {
 							if err1 != nil {
 								return
 							}
-
+							timer.Reset(interval)
 						}
 					}
 					go copyPacket(inbound, outbound)
-					copyPacket(outbound, inbound)
+					go copyPacket(outbound, inbound)
 
+					select {
+					case <-timer.C:
+						log.Debug("packet relay timeout")
+					case <-stopchan:
+					}
 					log.Debug("packet relay ends")
 				}(inbound)
 			}
