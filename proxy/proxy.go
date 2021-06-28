@@ -55,6 +55,7 @@ func (p *Proxy) relayConnLoop() {
 }
 
 var MaxCount = 0
+var MaxAlloc = 10
 
 func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	var currentIndex = 0
@@ -64,7 +65,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		if MaxCount > 0 {
 			lck.Lock()
 			var alloc = getMemAlloc()
-			if alloc > 1000000 {
+			if alloc > MaxAlloc*100000 {
 				for i, con := range conArr {
 					if con != nil {
 						con.Close()
@@ -194,10 +195,6 @@ func (p *Proxy) relayPacketLoop() {
 					}
 					defer outbound.Close()
 
-					stopchan := make(chan int)
-					defer close(stopchan)
-					interval := 10 * time.Second
-					timer := time.NewTimer(interval)
 					copyPacket := func(a, b tunnel.PacketConn) {
 						buf := make([]byte, MaxPacketSize)
 						for {
@@ -220,17 +217,10 @@ func (p *Proxy) relayPacketLoop() {
 							if err1 != nil {
 								return
 							}
-							timer.Reset(interval)
 						}
 					}
 					go copyPacket(inbound, outbound)
-					go copyPacket(outbound, inbound)
-
-					select {
-					case <-timer.C:
-						log.Debug("packet relay timeout")
-					case <-stopchan:
-					}
+					copyPacket(outbound, inbound)
 					log.Debug("packet relay ends")
 				}(inbound)
 			}

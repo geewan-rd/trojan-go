@@ -78,6 +78,10 @@ func StartProxyWithData(jsonData []byte) error {
 		if value != nil {
 			proxy.MaxCount = int(value.(float64))
 		}
+		value = dat["MaxAlloc"]
+		if value != nil {
+			proxy.MaxAlloc = int(value.(float64))
+		}
 	}
 	debug.SetGCPercent(10)
 	currentProxy = pr
