@@ -65,7 +65,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		if MaxCount > 0 {
 			lck.Lock()
 			var alloc = getMemAlloc()
-			if alloc > MaxAlloc*100000 {
+			if MaxAlloc > 0 && alloc > MaxAlloc*100000 {
 				for i, con := range conArr {
 					if con != nil {
 						con.Close()
@@ -125,7 +125,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			interval := 2 * time.Second
 			timer := time.NewTimer(interval)
 			copyConn := func(a, b net.Conn) {
-				buf := make([]byte, 512*8)
+				buf := make([]byte, 512*40)
 				defer func() {
 					stopchan <- 1
 				}()
