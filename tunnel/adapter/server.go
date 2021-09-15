@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
@@ -53,18 +52,10 @@ func (s *Server) acceptConnLoop() {
 		s.socksLock.RLock()
 		if buf[0] == 5 && s.nextSocks {
 			s.socksLock.RUnlock()
-
-			timer := time.NewTimer(2 * time.Second)
-			select {
-			case s.socksConn <- &freedom.Conn{
+			log.Debug("socks5 connection")
+			s.socksConn <- &freedom.Conn{
 				Conn: rewindConn,
-			}:
-				log.Debug("socks5 connection")
-			case <-timer.C:
-				conn := <-s.socksConn
-				log.Debugf("scoks5 timeout current:%s,clear:%s", rewindConn.LocalAddr(), conn.LocalAddr())
 			}
-
 		} else {
 			s.socksLock.RUnlock()
 			log.Debug("http connection")
