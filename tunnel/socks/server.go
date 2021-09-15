@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Jeffail/tunny"
 	_ "github.com/Jeffail/tunny"
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
@@ -119,8 +118,7 @@ func (s *Server) associate(conn net.Conn, addr *tunnel.Address) error {
 func (s *Server) packetDispatchLoop() {
 	for {
 		buf := make([]byte, MaxPacketSize)
-		runtime.GC()
-		debug.FreeOSMemory()
+
 		n, src, err := s.listenPacketConn.ReadFrom(buf)
 		if err != nil {
 			select {
@@ -131,8 +129,6 @@ func (s *Server) packetDispatchLoop() {
 				continue
 			}
 		}
-		log.Debug("socks recv udp packet from", src)
-		log.Debugf("YEtest socks:读取数据：%s,length:%d", src, n)
 		s.mappingLock.RLock()
 		conn, found := s.mapping[src.String()]
 		s.mappingLock.RUnlock()
@@ -164,7 +160,7 @@ func (s *Server) packetDispatchLoop() {
 						}
 						log.Debug("socks respond udp packet to", src, "metadata", info.metadata)
 					case <-time.After(time.Second * 5):
-						log.Info("socks udp session timeout, closed")
+						log.Infof("socks udp session timeout, closed,local:%s,src:%s", conn.LocalAddr(), src)
 						s.mappingLock.Lock()
 						delete(s.mapping, src.String())
 						s.mappingLock.Unlock()
@@ -198,9 +194,6 @@ func (s *Server) packetDispatchLoop() {
 			},
 			payload: payload[:length],
 		}:
-			log.Debugf("YETest socks:写入数据%s,length:%d,src:%s", address, length, conn.src)
-			runtime.GC()
-			debug.FreeOSMemory()
 		default:
 			log.Warn("socks udp queue full")
 		}
@@ -209,14 +202,7 @@ func (s *Server) packetDispatchLoop() {
 
 ///socks5 连接 接收loop
 func (s *Server) acceptLoop() {
-
-	pool := tunny.NewFunc(2, func(p interface{}) interface{} {
-		f := p.(func())
-		f()
-		return true
-	})
 	for {
-		time.Sleep(100 * time.Millisecond)
 		conn, err := s.underlay.AcceptConn(&Tunnel{})
 		if err != nil {
 			log.Error(common.NewError("socks accept err").Base(err))
@@ -255,13 +241,8 @@ func (s *Server) acceptLoop() {
 				newConn.Close()
 			}
 		}
-		if pool != nil {
-			pool.Process(func() {
-				confunc(conn)
-			})
-		} else {
-			go confunc(conn)
-		}
+		go confunc(conn)
+
 	}
 }
 

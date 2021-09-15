@@ -91,7 +91,9 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	}
 
 	for {
+		log.Debug("inbound acceptConn")
 		inbound, err := source.AcceptConn(nil)
+		log.Debugf("inbound acceptConn addr:%s,me:%s", inbound.LocalAddr(), inbound.Metadata())
 		if err != nil {
 			select {
 			case <-p.ctx.Done():
@@ -102,6 +104,7 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			log.Error(common.NewError("failed to accept connection").Base(err))
 			continue
 		}
+		log.Debugf("new conn local:%s,remoate:%s", inbound.LocalAddr(), inbound.Metadata())
 		if MaxCount > 0 {
 			index := currentIndex % MaxCount
 			addConn(inbound, index)
@@ -110,7 +113,6 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 		inboudFunc := func(inbound tunnel.Conn) {
 
 			outbound, err := p.sink.DialConn(inbound.Metadata().Address, nil)
-			stopchan := make(chan int, 2)
 			defer func() {
 				inbound.Close()
 				if outbound != nil {
@@ -122,21 +124,13 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 				log.Error(common.NewError("proxy failed to dial connection").Base(err))
 				return
 			}
-			interval := 2 * time.Second
+			interval := 3 * time.Second
 			timer := time.NewTimer(interval)
 			copyConn := func(a, b net.Conn) {
 				buf := make([]byte, 512*40)
 				defer func() {
-					stopchan <- 1
 				}()
 				for {
-					select {
-					case <-p.ctx.Done():
-						log.Debug("shutting down conn relay")
-						return
-					default:
-					}
-					defer gc()
 					var n int
 					n, err = b.Read(buf)
 					if err != nil {
@@ -155,7 +149,8 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 			select {
 			case <-timer.C:
 				log.Debug("conn relay timeout")
-			case <-stopchan:
+			case <-p.ctx.Done():
+				log.Debug("shutting down conn")
 			}
 
 			log.Debug("conn relay ends")

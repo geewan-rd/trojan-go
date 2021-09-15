@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/p4gefau1t/trojan-go/common"
 	"github.com/p4gefau1t/trojan-go/config"
@@ -52,10 +53,18 @@ func (s *Server) acceptConnLoop() {
 		s.socksLock.RLock()
 		if buf[0] == 5 && s.nextSocks {
 			s.socksLock.RUnlock()
-			log.Debug("socks5 connection")
-			s.socksConn <- &freedom.Conn{
+
+			timer := time.NewTimer(2 * time.Second)
+			select {
+			case s.socksConn <- &freedom.Conn{
 				Conn: rewindConn,
+			}:
+				log.Debug("socks5 connection")
+			case <-timer.C:
+				conn := <-s.socksConn
+				log.Debugf("scoks5 timeout current:%s,clear:%s", rewindConn.LocalAddr(), conn.LocalAddr())
 			}
+
 		} else {
 			s.socksLock.RUnlock()
 			log.Debug("http connection")
@@ -63,23 +72,29 @@ func (s *Server) acceptConnLoop() {
 				Conn: rewindConn,
 			}
 		}
+		log.Debug("next AcceptConn")
 	}
 }
 
 func (s *Server) AcceptConn(overlay tunnel.Tunnel) (tunnel.Conn, error) {
+	log.Debug("AcceptConn")
 	if _, ok := overlay.(*http.Tunnel); ok {
 		select {
 		case conn := <-s.httpConn:
+			log.Debug("AcceptConn https")
 			return conn, nil
 		case <-s.ctx.Done():
 			return nil, common.NewError("adapter closed")
 		}
 	} else if _, ok := overlay.(*socks.Tunnel); ok {
+		log.Debug("AcceptConn lock")
 		s.socksLock.Lock()
 		s.nextSocks = true
 		s.socksLock.Unlock()
+		log.Debug("AcceptConn unlock")
 		select {
 		case conn := <-s.socksConn:
+			log.Debug("AcceptConn socks")
 			return conn, nil
 		case <-s.ctx.Done():
 			return nil, common.NewError("adapter closed")
