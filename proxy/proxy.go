@@ -93,7 +93,6 @@ func acceptTunnelConn(source tunnel.Server, p *Proxy) {
 	for {
 		log.Debug("inbound acceptConn")
 		inbound, err := source.AcceptConn(nil)
-		log.Debugf("inbound acceptConn addr:%s,me:%s", inbound.LocalAddr(), inbound.Metadata())
 		if err != nil {
 			select {
 			case <-p.ctx.Done():

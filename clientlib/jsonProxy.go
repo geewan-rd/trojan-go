@@ -3,7 +3,6 @@ package TrojanGO
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"runtime"
 	"runtime/debug"
 	"time"
@@ -15,12 +14,32 @@ import (
 	_ "github.com/p4gefau1t/trojan-go/proxy/client"
 )
 
-func GoStartProxy(localAddr string, localPort int, remoteAddr string, remotePort int, password string) {
+var clientMap = make(map[int]*TrojanClient)
+
+func Start(jsonS string, tag int) {
+	c := &TrojanClient{}
+	clientMap[tag] = c
+	go c.StartProxyWithString(jsonS)
+}
+func Stop(tag int) {
+	c := clientMap[tag]
+	if c != nil {
+		c.StopProxy()
+		delete(clientMap, tag)
+	}
+}
+
+type TrojanClient struct {
+	currentProxy *proxy.Proxy
+	cachJsonData []byte
+}
+
+func (c *TrojanClient) GoStartProxy(localAddr string, localPort int, remoteAddr string, remotePort int, password string, loglevel int) {
 	log.SetLogLevel(0)
-	go StartProxy(localAddr, localPort, remoteAddr, remotePort, password)
+	go c.StartProxy(localAddr, localPort, remoteAddr, remotePort, password, loglevel)
 
 }
-func StartProxy(localAddr string, localPort int, remoteAddr string, remotePort int, password string) error {
+func (c *TrojanClient) StartProxy(localAddr string, localPort int, remoteAddr string, remotePort int, password string, loglevel int) error {
 	jsonMap := map[string]interface{}{}
 	jsonMap["run_type"] = "client"
 	jsonMap["local_addr"] = localAddr
@@ -29,7 +48,7 @@ func StartProxy(localAddr string, localPort int, remoteAddr string, remotePort i
 	jsonMap["remote_port"] = remotePort
 	jsonMap["password"] = []string{password}
 	jsonMap["ssl"] = map[string]interface{}{"verify": false, "sni": ""}
-	jsonMap["log_level"] = 0
+	jsonMap["log_level"] = loglevel
 
 	data, e := json.Marshal(jsonMap)
 	if e != nil {
@@ -37,35 +56,23 @@ func StartProxy(localAddr string, localPort int, remoteAddr string, remotePort i
 		return e
 	}
 
-	return StartProxyWithData(data)
+	return c.StartProxyWithData(data)
 }
-func GOStartProxyWithData(jsonData []byte) {
-	go StartProxyWithData(jsonData)
+func (c *TrojanClient) GOStartProxyWithData(jsonData []byte) {
+	go c.StartProxyWithData(jsonData)
 }
-func StopProxy() {
-	if currentProxy != nil {
-		currentProxy.Close()
+func (c *TrojanClient) StopProxy() {
+	if c.currentProxy != nil {
+		c.currentProxy.Close()
 		runtime.GC()
 		debug.FreeOSMemory()
 	}
 }
-func TestStopProxy() {
-	StopProxy()
-	go func() {
-		time.Sleep(5 * time.Second)
-		log.Debug("停止后，3秒强制退出进程")
-		runtime.Goexit()
-		os.Exit(0)
-	}()
-}
 
-var currentProxy *proxy.Proxy
-var cachJsonData []byte
-
-func StartProxyWithData(jsonData []byte) error {
+func (c *TrojanClient) StartProxyWithData(jsonData []byte) error {
 	var data = jsonData
-	cachJsonData = make([]byte, len(jsonData))
-	copy(cachJsonData, jsonData)
+	c.cachJsonData = make([]byte, len(jsonData))
+	copy(c.cachJsonData, jsonData)
 	pr, err := proxy.NewProxyFromConfigData(data, true)
 	if err != nil {
 		fmt.Print("error:%@", err.Error())
@@ -84,7 +91,7 @@ func StartProxyWithData(jsonData []byte) error {
 		}
 	}
 	debug.SetGCPercent(10)
-	currentProxy = pr
+	c.currentProxy = pr
 	// go func() {
 	// 	time.Sleep(10 * time.Second)
 	// 	go pr.Close()
@@ -99,14 +106,14 @@ func StartProxyWithData(jsonData []byte) error {
 
 	return nil
 }
-func StartProxyWithString(jsonData string) {
+func (c *TrojanClient) StartProxyWithString(jsonData string) {
 	b := []byte(jsonData)
 	_, err := getJson(b)
 	if err != nil {
 		log.Fatalf("json错误：%s,json:%s", err.Error(), jsonData)
 	}
 
-	go StartProxyWithData(b)
+	go c.StartProxyWithData(b)
 }
 func getJson(b []byte) (map[string]interface{}, error) {
 	var dat map[string]interface{}
@@ -116,29 +123,13 @@ func getJson(b []byte) (map[string]interface{}, error) {
 	return dat, nil
 }
 
-var isDebugShowAlloc = false
+func (c *TrojanClient) ReStart() {
 
-func debugShowAlloc() {
-	if isDebugShowAlloc {
-		return
-	}
-	isDebugShowAlloc = true
-	go func() {
-		for {
-			time.Sleep(500 * time.Millisecond)
-			var info runtime.MemStats
-			runtime.ReadMemStats(&info)
-			log.Debugf("YeTest:alloc:%d,heapAlloc:%d", info.Alloc, info.HeapAlloc)
-		}
-	}()
-}
-func ReStart() {
-
-	go currentProxy.Close()
+	go c.currentProxy.Close()
 	runtime.GC()
 	debug.FreeOSMemory()
 	time.Sleep(1000 * time.Millisecond)
-	go StartProxyWithData(cachJsonData)
+	go c.StartProxyWithData(c.cachJsonData)
 }
 
 // func InputPacket(data []byte) {
